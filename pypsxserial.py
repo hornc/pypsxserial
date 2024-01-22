@@ -44,6 +44,11 @@ import sys
 import time
 
 
+def fake_header(addr: int):
+    # Return a fake header to send with data files.
+    pass
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print("usage: pypsxserial.py <FILE_TO_UPLOAD.EXE> <SERIAL_PORT_DEVICE>\n")
@@ -65,19 +70,29 @@ if __name__ == '__main__':
             print(f'response received: {data}')
             print("having a little nap...")
             time.sleep(1)
+
+            if filename.endswith('.exe'):
+                header = filedata[0:2048]
+                chunkoffset = 1
+            elif filename.endswith('.tim'):
+                header = fake_header(0x80120000)
+                chunkoffset = 0
+            pc = header[16:20]
+            addr = header[24:28]
+            length = header[28:32]
             print("sending header....", end="")
-            ser.write(filedata[0:2048])
+            ser.write(header)
             print(",PC...", end="")
-            ser.write(filedata[16:20])
+            ser.write(pc)
             print(",writeaddr...", end="")
-            ser.write(filedata[24:28])
-            print(",writelen...")
-            ser.write(filedata[28:32])
+            ser.write(addr)
+            print(f",writelen ({length})...")
+            ser.write(length)
             print("now sending file contents:")
-            chunks = (int)((filelen - (filelen % 2048)) / 2048)
-            for x in range(chunks):
+            chunks = (filelen - (filelen % 2048)) // 2048
+            for x in range(chunkoffset, chunks):
                 print(f'chunk: {x}')
-                ser.write(filedata[(x + 1) * 2048:(x + 2) * 2048])
+                ser.write(filedata[x * 2048:(x + 1) * 2048])
             print("writing remaining bytes")
             ser.write(filedata[(chunks * 2048):(chunks * 2048) + (filelen % 2048)])
             print("sending close & execute command...")
