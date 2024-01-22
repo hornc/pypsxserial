@@ -43,14 +43,16 @@ import serial
 import sys
 import time
 
+
 PSXSERIAL = 0x801ecd94  # PC for PSXSERIAL v1.3
+
 
 def fake_header(addr: int, filelen: int):
     # Return a fake header to send with data files.
     header = bytearray('PS-X EXE', 'ascii')
     header.extend(bytes(2040))
-    header[0x10:0x13] = PSXSERIAL.to_bytes(4, 'little')
-    header[0x18:0x1B] = addr.to_bytes(4, 'little')
+    header[16:20] = PSXSERIAL.to_bytes(4, 'little')
+    header[24:28] = addr.to_bytes(4, 'little')
     header[28:32] = filelen.to_bytes(4, 'little')
     return header
 
@@ -77,11 +79,11 @@ if __name__ == '__main__':
             print("having a little nap...")
             time.sleep(1)
 
-            if filename.endswith('.exe'):
+            if filename.lower().endswith('.exe'):
                 header = filedata[0:2048]
                 chunkoffset = 1
-            elif filename.endswith('.tim'):
-                header = fake_header(0x80120000, filelen)
+            elif filename.lower().endswith('.tim'):
+                header = fake_header(0x80120000, filelen)  # addr is hardcoded for testing, TODO: read from .sio or args
                 chunkoffset = 0
             pc = header[16:20]
             addr = header[24:28]
