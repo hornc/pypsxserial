@@ -43,10 +43,16 @@ import serial
 import sys
 import time
 
+PSXSERIAL = 0x801ecd94  # PC for PSXSERIAL v1.3
 
-def fake_header(addr: int):
+def fake_header(addr: int, filelen: int):
     # Return a fake header to send with data files.
-    pass
+    header = bytearray('PS-X EXE', 'ascii')
+    header.extend(bytes(2040))
+    header[0x10:0x13] = PSXSERIAL.to_bytes(4, 'little')
+    header[0x18:0x1B] = addr.to_bytes(4, 'little')
+    header[28:32] = filelen.to_bytes(4, 'little')
+    return header
 
 
 if __name__ == '__main__':
@@ -75,7 +81,7 @@ if __name__ == '__main__':
                 header = filedata[0:2048]
                 chunkoffset = 1
             elif filename.endswith('.tim'):
-                header = fake_header(0x80120000)
+                header = fake_header(0x80120000, filelen)
                 chunkoffset = 0
             pc = header[16:20]
             addr = header[24:28]
