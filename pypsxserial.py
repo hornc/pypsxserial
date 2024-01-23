@@ -40,8 +40,7 @@
 
 import argparse
 import serial
-import sys
-import time
+from time import sleep
 
 
 PSXSERIAL = 0x801ecd94  # PC for PSXSERIAL v1.3
@@ -57,14 +56,14 @@ def fake_header(addr: int, filelen: int):
     return header
 
 
-if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        print("usage: pypsxserial.py <FILE_TO_UPLOAD.EXE> <SERIAL_PORT_DEVICE>\n")
-        print("example port devices:\n   /dev/cu.usbserial (macOS - avoid tty.*)\n   /dev/ttyUSB0 (linux)\n   COM1 (windows)\n")
-        quit(-1)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename', help="file to upload")
+    parser.add_argument('ttydevice', help="example port devices:\n   /dev/cu.usbserial (macOS - avoid tty.*)\n   /dev/ttyUSB0 (linux)\n   COM1 (windows)\n")
+    args = parser.parse_args()
 
-    filename = sys.argv[1]
-    ttydevice = sys.argv[2]
+    filename = args.filename
+    ttydevice = args.ttydevice
 
     try:
         filedata = open(filename, 'rb').read()
@@ -77,7 +76,7 @@ if __name__ == '__main__':
             data=ser.read(1)
             print(f'response received: {data}')
             print("having a little nap...")
-            time.sleep(1)
+            sleep(1)
 
             if filename.lower().endswith('.exe'):
                 header = filedata[0:2048]
@@ -114,4 +113,8 @@ if __name__ == '__main__':
         raise e  # Let's see what it is...
     finally:
         # need a sleep, to avoid bad driver bugs
-        time.sleep(2)
+        sleep(2)
+
+
+if __name__ == '__main__':
+    main()
