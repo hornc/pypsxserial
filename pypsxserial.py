@@ -47,7 +47,7 @@ PSXSERIAL = 0x801ecd94  # PC for PSXSERIAL v1.3
 
 
 def fake_header(addr: int, filelen: int):
-    # Return a fake header to send with data files.
+    """Return a fake header to send with data files."""
     header = bytearray('PS-X EXE', 'ascii')
     header.extend(bytes(2040))
     header[16:20] = PSXSERIAL.to_bytes(4, 'little')
@@ -60,10 +60,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('filename', help="file to upload")
     parser.add_argument('ttydevice', help="example port devices:\n   /dev/cu.usbserial (macOS - avoid tty.*)\n   /dev/ttyUSB0 (linux)\n   COM1 (windows)\n")
+    parser.add_argument('--addr', '-a', help="memory address (hex) to load the file to (if not a PS-X EXE) e.g. 0x80120000")
     args = parser.parse_args()
 
     filename = args.filename
     ttydevice = args.ttydevice
+    if args.addr:
+        try:
+            int(args.addr, 16)
+        except ValueError:
+            print(f'Unable to parse memory address "{args.addr}". Please enter a hex string e.g. 0x80120000')
+            exit(1)
 
     try:
         filedata = open(filename, 'rb').read()
@@ -82,7 +89,7 @@ def main():
                 header = filedata[0:2048]
                 chunkoffset = 1
             elif filename.lower().endswith('.tim'):
-                header = fake_header(0x80120000, filelen)  # addr is hardcoded for testing, TODO: read from .sio or args
+                header = fake_header(int(args.addr, 16), filelen)
                 chunkoffset = 0
             pc = header[16:20]
             addr = header[24:28]
@@ -93,7 +100,7 @@ def main():
             ser.write(pc)
             print(",writeaddr...", end="")
             ser.write(addr)
-            print(f",writelen ({length})...")
+            print(",writelen...")
             ser.write(length)
             print("now sending file contents:")
             chunks = (filelen - (filelen % 2048)) // 2048
@@ -108,6 +115,10 @@ def main():
                 finalchunk += b'\xff'
             ser.write(finalchunk)
             print("done!")
+    except (FileNotFoundError, serial.serialutil.SerialException) as e:
+        # Catch file not found or unable to open serial port errors and inform user.
+        print(str(e))
+        exit(1)
     except Exception as e:
         print("something error happens")
         raise e  # Let's see what it is...
