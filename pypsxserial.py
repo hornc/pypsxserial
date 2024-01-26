@@ -42,7 +42,7 @@ import argparse
 import serial
 from time import sleep
 
-
+LIBPS = ['libmon22.exe', 'libps.exe']  # LIBPS library alternatives in order of preference
 PSXSERIAL = 0x801ecd94  # PC for PSXSERIAL v1.3
 
 
@@ -61,6 +61,7 @@ def main():
     parser.add_argument('filename', help="file to upload")
     parser.add_argument('ttydevice', help="example port devices:\n   /dev/cu.usbserial (macOS - avoid tty.*)\n   /dev/ttyUSB0 (linux)\n   COM1 (windows)\n")
     parser.add_argument('--addr', '-a', help="memory address (hex) to load the file to (if not a PS-X EXE) e.g. 0x80120000")
+    parser.add_argument('--libps', help="send libps.exe (or equivalent) library before running filename", action='store_true')
     args = parser.parse_args()
 
     filename = args.filename
