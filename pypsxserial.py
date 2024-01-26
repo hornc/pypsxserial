@@ -38,54 +38,95 @@
 #    close port
 #
 
+import argparse
 import serial
-import sys
-import time
+from time import sleep
 
-if len(sys.argv) < 3:
-    print("usage: pypsxserial.py <FILE_TO_UPLOAD.EXE> <SERIAL_PORT_DEVICE>\n")
-    print("example port devices:\n   /dev/cu.usbserial (macOS - avoid tty.*)\n   /dev/ttyUSB0 (linux)\n   COM1 (windows)\n")
-    quit(-1)
+LIBPS = ['libmon22.exe', 'libps.exe']  # LIBPS library alternatives in order of preference
+PSXSERIAL = 0x801ecd94  # PC for PSXSERIAL v1.3
 
-filename = sys.argv[1]
-ttydevice = sys.argv[2]
 
-try:
-    filedata=open(filename,"rb").read()
-    filelen=len(filedata)
-    with serial.Serial(ttydevice,115200) as ser:
-        print(f'using serial port: {ser.name}')
-        print("sending start command 0x63...",end="")
-        ser.write(b'\x63')
-        print("done. reading response...")
-        data=ser.read(1)
-        print(f'response received: {data}')
-        print("having a little nap...")
-        time.sleep(1)
-        print("sending header....",end="")
-        ser.write(filedata[0:2048])
-        print(",PC...",end="")
-        ser.write(filedata[16:20])
-        print(",writeaddr...",end="")
-        ser.write(filedata[24:28])
-        print(",writelen...")
-        ser.write(filedata[28:32])
-        print("now sending file contents:")
-        chunks = (int)((filelen-(filelen%2048))/2048)
-        for x in range(chunks):
-            print(f'chunk: {x}')
-            ser.write(filedata[(x+1)*2048:(x+2)*2048])
-        print("writing remaining bytes")
-        ser.write(filedata[(chunks*2048):(chunks*2048)+(filelen%2048)])
-        print("sending close & execute command...")
-        finalchunk = b''
-        for x in range(2048):
-            finalchunk += b'\xff'
-        ser.write(finalchunk)
-        print("done!")
-        ser.close()
-except:
-    print("something error happens")
-finally:
-    #need a sleep, to avoid bad driver bugs
-    time.sleep(2)
+def fake_header(addr: int, filelen: int):
+    """Return a fake header to send with data files."""
+    header = bytearray('PS-X EXE', 'ascii')
+    header.extend(bytes(2040))
+    header[16:20] = PSXSERIAL.to_bytes(4, 'little')
+    header[24:28] = addr.to_bytes(4, 'little')
+    header[28:32] = filelen.to_bytes(4, 'little')
+    return header
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filename', help="file to upload")
+    parser.add_argument('ttydevice', help="example port devices:\n   /dev/cu.usbserial (macOS - avoid tty.*)\n   /dev/ttyUSB0 (linux)\n   COM1 (windows)\n")
+    parser.add_argument('--addr', '-a', help="memory address (hex) to load the file to (if not a PS-X EXE) e.g. 0x80120000")
+    parser.add_argument('--libps', help="send libps.exe (or equivalent) library before running filename", action='store_true')
+    args = parser.parse_args()
+
+    filename = args.filename
+    ttydevice = args.ttydevice
+    if args.addr:
+        try:
+            int(args.addr, 16)
+        except ValueError:
+            print(f'Unable to parse memory address "{args.addr}". Please enter a hex string e.g. 0x80120000')
+            exit(1)
+
+    try:
+        filedata = open(filename, 'rb').read()
+        filelen = len(filedata)
+        with serial.Serial(ttydevice, 115200) as ser:
+            print(f'using serial port: {ser.name}')
+            print("sending start command 0x63...", end="")
+            ser.write(b'\x63')
+            print("done. reading response...")
+            data=ser.read(1)
+            print(f'response received: {data}')
+            print("having a little nap...")
+            sleep(1)
+
+            if filename.lower().endswith('.exe'):
+                header = filedata[0:2048]
+                chunkoffset = 1
+            elif filename.lower().endswith('.tim'):
+                header = fake_header(int(args.addr, 16), filelen)
+                chunkoffset = 0
+            pc = header[16:20]
+            addr = header[24:28]
+            length = header[28:32]
+            print("sending header....", end="")
+            ser.write(header)
+            print(",PC...", end="")
+            ser.write(pc)
+            print(",writeaddr...", end="")
+            ser.write(addr)
+            print(",writelen...")
+            ser.write(length)
+            print("now sending file contents:")
+            chunks = (filelen - (filelen % 2048)) // 2048
+            for x in range(chunkoffset, chunks):
+                print(f'chunk: {x}')
+                ser.write(filedata[x * 2048:(x + 1) * 2048])
+            print("writing remaining bytes")
+            ser.write(filedata[(chunks * 2048):(chunks * 2048) + (filelen % 2048)])
+            print("sending close & execute command...")
+            finalchunk = b''
+            for x in range(2048):
+                finalchunk += b'\xff'
+            ser.write(finalchunk)
+            print("done!")
+    except (FileNotFoundError, serial.serialutil.SerialException) as e:
+        # Catch file not found or unable to open serial port errors and inform user.
+        print(str(e))
+        exit(1)
+    except Exception as e:
+        print("something error happens")
+        raise e  # Let's see what it is...
+    finally:
+        # need a sleep, to avoid bad driver bugs
+        sleep(2)
+
+
+if __name__ == '__main__':
+    main()
